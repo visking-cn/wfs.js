@@ -306,7 +306,7 @@ function isUndefined(arg) {
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
-  value: true
+    value: true
 });
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
@@ -325,9 +325,246 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
 
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+// import {playAudio} from "./audio.sj"
+// import * as audioParams from './audio'
+
+var DECODER_WEBAUDIO = 0;
+var DECODER_MSE = 1;
+
+var AudioPlay = function (_EventHandler) {
+    _inherits(AudioPlay, _EventHandler);
+
+    function AudioPlay(wfs) {
+        _classCallCheck(this, AudioPlay);
+
+        var _this2 = _possibleConstructorReturn(this, (AudioPlay.__proto__ || Object.getPrototypeOf(AudioPlay)).call(this, wfs, _events2.default.AUDIODATA_APPENDING, _events2.default.INIT_AUDIOPLAY));
+
+        _this2.CHUNK_SIZE = 4096;
+        _this2.audioContext;
+        _this2.audioSource;
+        _this2.fileBuffer = [];
+        _this2.BufferSize = 0;
+        _this2.audioEl;
+        _this2.mediaSource;
+        _this2.sourceBuffer;
+        _this2.isMSEStart = false;
+        _this2.audioDecoder = 0; //0 - audio context; 1 - media source extention
+        _this2.scriptBuffer;
+        _this2.scriptPos = 0;
+
+        _this2.scriptNode;
+        _this2.state = 0;
+
+        _this2.isInit = false;
+
+        _this2.onmseopen = _this2.sourceOpenCallback.bind(_this2);
+        _this2.onmseended = _this2.updateEndCallback.bind(_this2);
+        return _this2;
+    }
+
+    _createClass(AudioPlay, [{
+        key: 'onInitAudioPlay',
+        value: function onInitAudioPlay(data) {
+            if (data.type == "start") {
+                if (this.audioDecoder === DECODER_WEBAUDIO) {
+                    this.init();
+                } else if (this.audioDecoder === DECODER_MSE) this.initMSE();
+            } else {
+                this.closeAudio();
+            }
+        }
+    }, {
+        key: 'onAudioDataAppending',
+        value: function onAudioDataAppending(data) {
+            if (!this.isInit) return;
+            this.fileBuffer.push(data.data);
+            this.BufferSize += data.data.byteLength;
+            if (this.audioDecoder === DECODER_MSE) {
+                if (this.sourceBuffer && !this.sourceBuffer.updating) {
+                    this.loadNextBuffer();
+                }
+                if (!this.isMSEStart) {
+                    this.isMSEStart = true;
+                    this.startMSEPlay();
+                }
+            } else {
+                if (this.fileBuffer.length > 3 && this.state === 0) {
+                    var dataBuffer = this.mergeBuffer(this.fileBuffer, this.BufferSize);
+                    this.getData(dataBuffer);
+                    this.fileBuffer = [];
+                    this.BufferSize = 0;
+                }
+            }
+        }
+    }, {
+        key: 'closeAudio',
+        value: function closeAudio() {
+            this.isInit = false;
+        }
+    }, {
+        key: 'initWebAudio',
+        value: function initWebAudio() {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }, {
+        key: 'initMSE',
+        value: function initMSE() {
+            this.mediaSource = new MediaSource();
+            this.mediaSource.addEventListener('sourceopen', this.onmseopen, false);
+            this.mediaSource.addEventListener('webkitsourceopen', this.onmseopen, false);
+            this.mediaSource.addEventListener('sourceclose', this.sourceCloseCallback, false);
+            this.mediaSource.addEventListener('webkitsourceclose', this.sourceCloseCallback, false);
+            this.mediaSource.addEventListener('sourceended', this.sourceEndedCallback, false);
+            this.mediaSource.addEventListener('webkitsourceended', this.sourceEndedCallback, false);
+
+            this.audioEl = document.createElement('audio');
+            this.audioEl.src = window.URL.createObjectURL(this.mediaSource);
+
+            this.initWebAudio();
+            var source = this.audioContext.createMediaElementSource(this.audioEl);
+            source.connect(this.audioContext.destination);
+            this.isInit = true;
+        }
+    }, {
+        key: 'sourceOpenCallback',
+        value: function sourceOpenCallback() {
+            console.log('Media Source Ready');
+            this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/aac');
+            this.sourceBuffer.addEventListener('updateend', this.onmseended, false);
+            // this.loadNextBuffer();
+        }
+    }, {
+        key: 'sourceCloseCallback',
+        value: function sourceCloseCallback() {
+            // console.log('Media Source closed')
+        }
+    }, {
+        key: 'sourceEndedCallback',
+        value: function sourceEndedCallback() {
+            // console.log('Media Source ended')
+        }
+    }, {
+        key: 'updateEndCallback',
+        value: function updateEndCallback() {
+            // console.log('load next buffer in update end')
+            // this.loadNextBuffer()
+        }
+    }, {
+        key: 'loadNextBuffer',
+        value: function loadNextBuffer() {
+            if (this.fileBuffer.length > 3) {
+                var dataBuffer = this.mergeBuffer(this.fileBuffer, this.BufferSize);
+                this.sourceBuffer.appendBuffer(dataBuffer);
+                this.fileBuffer = [];
+                this.BufferSize = 0;
+            }
+        }
+    }, {
+        key: 'startMSEPlay',
+        value: function startMSEPlay() {
+            if (this.audioEl.paused) {
+                this.audioEl.play();
+            }
+        }
+    }, {
+        key: 'mergeBuffer',
+        value: function mergeBuffer(arr, size) {
+            var res = new Uint8Array(size);
+            var pos = 0;
+            for (var i = 0; i < arr.length; i++) {
+                var tmp = new Uint8Array(arr[i]);
+                res.set(tmp, pos);
+                pos += tmp.byteLength;
+            }
+            return res.buffer;
+        }
+    }, {
+        key: 'init',
+        value: function init() {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.audioSource = this.audioContext.createBufferSource();
+
+            // Create a ScriptProcessorNode with a bufferSize of 4096 and a single input and output channel
+            var bufferSize = 1024;
+            this.scriptNode = this.audioContext.createScriptProcessor(bufferSize, 2, 2);
+            console.log(this.scriptNode.bufferSize);
+
+            var _this = this;
+            // Give the node a function to process audio events
+            this.scriptNode.onaudioprocess = function (audioProcessingEvent) {
+                if (_this.scriptBuffer) {
+                    var inputBuffer = _this.scriptBuffer;
+                    var outputBuffer = audioProcessingEvent.outputBuffer;
+                    var lastLength = _this.scriptBuffer.length - _this.scriptPos;
+                    if (lastLength > 0) {
+                        var currentPos = _this.scriptPos;
+                        var copyLength = Math.min(lastLength, outputBuffer.length);
+                        _this.scriptPos += copyLength;
+                        for (var channel = 0; channel < outputBuffer.numberOfChannels; channel++) {
+                            var inputData = inputBuffer.getChannelData(channel);
+                            var outputData = outputBuffer.getChannelData(channel);
+                            for (var sample = 0; sample < copyLength; sample++) {
+                                outputData[sample] = inputData[sample + currentPos];
+                            }
+                        }
+                    }
+                    if (lastLength === 0) _this.state = 0;
+                }
+            };
+            this.scriptNode.connect(this.audioContext.destination);
+            this.isInit = true;
+        }
+    }, {
+        key: 'getData',
+        value: function getData(audioData) {
+            var _this = this;
+            this.audioContext.decodeAudioData(audioData, function (buffer) {
+                _this.state = 1;
+                _this.scriptPos = 0;
+                _this.scriptBuffer = buffer;
+            }, function (e) {
+                "Error with decoding audio data" + e.err;
+            });
+        }
+    }]);
+
+    return AudioPlay;
+}(_eventHandler2.default);
+
+exports.default = AudioPlay;
+
+},{"../event-handler":8,"../events":9}],3:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+var _events = require('../events');
+
+var _events2 = _interopRequireDefault(_events);
+
+var _eventHandler = require('../event-handler');
+
+var _eventHandler2 = _interopRequireDefault(_eventHandler);
+
+var _errors = require('../errors');
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
 function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } /*
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 * Buffer Controller
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                */
+
+// import MSE from '../remux/MSE'
 
 var BufferController = function (_EventHandler) {
   _inherits(BufferController, _EventHandler);
@@ -335,7 +572,9 @@ var BufferController = function (_EventHandler) {
   function BufferController(wfs) {
     _classCallCheck(this, BufferController);
 
-    var _this = _possibleConstructorReturn(this, (BufferController.__proto__ || Object.getPrototypeOf(BufferController)).call(this, wfs, _events2.default.MEDIA_ATTACHING, _events2.default.BUFFER_APPENDING, _events2.default.BUFFER_RESET));
+    var _this = _possibleConstructorReturn(this, (BufferController.__proto__ || Object.getPrototypeOf(BufferController)).call(this, wfs, _events2.default.MEDIA_ATTACHING, _events2.default.BUFFER_APPENDING, _events2.default.BUFFER_RESET, _events2.default.BUFFER_SETLIVE
+    // Event.AUDIODATA_APPENDING
+    ));
 
     _this.mediaSource = null;
     _this.media = null;
@@ -343,24 +582,82 @@ var BufferController = function (_EventHandler) {
     _this.sourceBuffer = {};
     _this.segments = [];
 
-    _this.appended = 0;
-    _this._msDuration = null;
-
     // Source Buffer listeners
     _this.onsbue = _this.onSBUpdateEnd.bind(_this);
 
     _this.browserType = 0;
-    if (navigator.userAgent.toLowerCase().indexOf('firefox') !== -1) {
+    var BrowName = _this.BrowserType();
+    if (BrowName === "Edge" || BrowName === "Edg") {
+      _this.browserType = 2;
+    } else if (BrowName === "Edge") {
       _this.browserType = 1;
     }
     _this.mediaType = 'H264Raw';
 
     _this.websocketName = undefined;
     _this.channelName = undefined;
+    _this.websocketUrl = undefined;
+    _this.requestMsg = undefined;
+
+    _this.audioMediaSource = null;
+    _this.audioContext;
+    _this.audioSourceBuffer;
+    _this.audioBufs = [];
+    _this.audioEl;
+    _this.audiostart = false;
+    _this.curframetime = 0;
+    _this.isLive = false;
     return _this;
   }
 
   _createClass(BufferController, [{
+    key: 'BrowserType',
+    value: function BrowserType() {
+      var userAgent = navigator.userAgent; //取得浏览器的userAgent字符串
+      var isOpera = userAgent.indexOf("Opera") > -1; //判断是否Opera浏览器
+      var isIE = userAgent.indexOf("compatible") > -1 && userAgent.indexOf("MSIE") > -1 && !isOpera; //判断是否IE浏览器
+      var isEdge = userAgent.indexOf("Edge") > -1 || userAgent.indexOf("Edg") > -1; //判断是否IE的Edge浏览器
+      var isFF = userAgent.indexOf("Firefox") > -1; //判断是否Firefox浏览器
+      var isSafari = userAgent.indexOf("Safari") > -1 && userAgent.indexOf("Chrome") == -1; //判断是否Safari浏览器
+      var isChrome = userAgent.indexOf("Chrome") > -1 && userAgent.indexOf("Safari") > -1; //判断Chrome浏览器
+
+      if (isIE) {
+        var reIE = new RegExp("MSIE (\\d+\\.\\d+);");
+        reIE.test(userAgent);
+        var fIEVersion = parseFloat(RegExp["$1"]);
+        if (fIEVersion == 7) {
+          return "IE7";
+        } else if (fIEVersion == 8) {
+          return "IE8";
+        } else if (fIEVersion == 9) {
+          return "IE9";
+        } else if (fIEVersion == 10) {
+          return "IE10";
+        } else if (fIEVersion == 11) {
+          return "IE11";
+        } else {
+          return "0";
+        } //IE版本过低
+      } //isIE end
+
+      if (isFF) {
+        return "FF";
+      }
+      if (isOpera) {
+        return "Opera";
+      }
+      if (isSafari) {
+        return "Safari";
+      }
+      if (isEdge) {
+        return "Edge";
+      }
+      if (isChrome) {
+        return "Chrome";
+      }
+    } //myBrowser() end
+
+  }, {
     key: 'destroy',
     value: function destroy() {
       _eventHandler2.default.prototype.destroy.call(this);
@@ -372,6 +669,9 @@ var BufferController = function (_EventHandler) {
       this.mediaType = data.mediaType;
       this.websocketName = data.websocketName;
       this.channelName = data.channelName;
+      this.websocketUrl = data.websocketUrl;
+      this.requestMsg = data.requestMsg;
+      this.callback = data.callback;
       if (media) {
         // setup the media source
         var ms = this.mediaSource = new MediaSource();
@@ -384,6 +684,7 @@ var BufferController = function (_EventHandler) {
         ms.addEventListener('sourceclose', this.onmsc);
         // link video and media Source
         media.src = URL.createObjectURL(ms);
+        // var ms = new MSE(media);
       }
     }
   }, {
@@ -407,7 +708,7 @@ var BufferController = function (_EventHandler) {
   }, {
     key: 'onMediaSourceEnded',
     value: function onMediaSourceEnded() {
-      console.log('media source ended');
+      // console.log('media source ended');
     }
   }, {
     key: 'onSBUpdateEnd',
@@ -417,19 +718,27 @@ var BufferController = function (_EventHandler) {
         this.mediaSource.endOfStream();
         this.media.play();
       }
-
       this.appending = false;
       this.doAppending();
       this.updateMediaElementDuration();
     }
   }, {
     key: 'updateMediaElementDuration',
-    value: function updateMediaElementDuration() {}
+    value: function updateMediaElementDuration() {
+      if (this.isLive && this.media.buffered.length > 0) {
+        var end = this.media.buffered.end(0);
+        var diff = end - this.media.currentTime;
+        if (diff > 0.5) {
+          this.media.currentTime = end - 0.1;
+        }
+      }
+    }
   }, {
     key: 'onMediaSourceOpen',
     value: function onMediaSourceOpen() {
       var mediaSource = this.mediaSource;
       if (mediaSource) {
+        // this.mediaSource.duration = 40;//40/1000;
         // once received, don't listen anymore to sourceopen event
         mediaSource.removeEventListener('sourceopen', this.onmso);
       }
@@ -438,7 +747,7 @@ var BufferController = function (_EventHandler) {
         this.checkPendingTracks();
       }
 
-      this.wfs.trigger(_events2.default.MEDIA_ATTACHED, { media: this.media, channelName: this.channelName, mediaType: this.mediaType, websocketName: this.websocketName });
+      this.wfs.trigger(_events2.default.MEDIA_ATTACHED, { media: this.media, websocketUrl: this.websocketUrl, requestMsg: this.requestMsg, channelName: this.channelName, mediaType: this.mediaType, websocketName: this.websocketName, callback: this.callback });
     }
   }, {
     key: 'checkPendingTracks',
@@ -468,7 +777,7 @@ var BufferController = function (_EventHandler) {
       try {
         var sb = sourceBuffer['video'] = mediaSource.addSourceBuffer(mimeType);
         sb.addEventListener('updateend', this.onsbue);
-        track.buffer = sb;
+        tracks.buffer = sb;
       } catch (err) {}
       this.wfs.trigger(_events2.default.BUFFER_CREATED, { tracks: tracks });
       this.media.play();
@@ -483,6 +792,8 @@ var BufferController = function (_EventHandler) {
       if (Object.keys(sourceBuffer).length) {
 
         if (this.media.error) {
+          // this.media.paused = false;
+          this.media.play();
           this.segments = [];
           console.log('trying to append although a media error occured, flush segment and abort');
           return;
@@ -498,20 +809,26 @@ var BufferController = function (_EventHandler) {
               this.parent = segment.parent;
               sourceBuffer[segment.type].appendBuffer(segment.data);
               this.appendError = 0;
-              this.appended++;
               this.appending = true;
-            } else {}
+              if (this.callback) {
+                if (this.curframetime != segment.ftime) {
+                  this.curframetime = segment.ftime;
+                } else {
+                  this.callback({ pts: segment.ftime });
+                }
+              }
+            }
           } catch (err) {
             // in case any error occured while appending, put back segment in segments table 
-            segments.unshift(segment);
-            var event = { type: ErrorTypes.MEDIA_ERROR };
+            console.log("appendBuffer error code:", err.code);
+            var event = { type: _errors.ErrorTypes.MEDIA_ERROR };
             if (err.code !== 22) {
               if (this.appendError) {
                 this.appendError++;
               } else {
                 this.appendError = 1;
               }
-              event.details = ErrorDetails.BUFFER_APPEND_ERROR;
+              event.details = _errors.ErrorDetails.BUFFER_APPEND_ERROR;
               event.frag = this.fragCurrent;
               if (this.appendError > wfs.config.appendErrorMaxRetry) {
                 segments = [];
@@ -522,7 +839,7 @@ var BufferController = function (_EventHandler) {
               }
             } else {
               this.segments = [];
-              event.details = ErrorDetails.BUFFER_FULL_ERROR;
+              event.details = _errors.ErrorDetails.BUFFER_FULL_ERROR;
               return;
             }
           }
@@ -536,7 +853,7 @@ var BufferController = function (_EventHandler) {
 
 exports.default = BufferController;
 
-},{"../event-handler":7,"../events":8}],3:[function(require,module,exports){
+},{"../errors":7,"../event-handler":8,"../events":9}],4:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -563,6 +880,8 @@ function _inherits(subClass, superClass) { if (typeof superClass !== "function" 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 * Flow Controller
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                */
 
+var pendingAppendingcount = 0;
+
 var FlowController = function (_EventHandler) {
   _inherits(FlowController, _EventHandler);
 
@@ -576,6 +895,7 @@ var FlowController = function (_EventHandler) {
     _this.pendingAppending = 0;
     _this.mediaType = undefined;
     channelName: _this.channelName;
+    // setInterval(this.outputlog, 1000);
     return _this;
   }
 
@@ -585,11 +905,17 @@ var FlowController = function (_EventHandler) {
       _eventHandler2.default.prototype.destroy.call(this);
     }
   }, {
+    key: 'outputlog',
+    value: function outputlog() {
+      console.log("this.pendingAppending :", pendingAppendingcount);
+    }
+  }, {
     key: 'onMediaAttached',
     value: function onMediaAttached(data) {
-      if (data.websocketName != undefined) {
-        var client = new WebSocket('ws://' + window.location.host + '/' + data.websocketName);
-        this.wfs.attachWebsocket(client, data.channelName);
+      if (data.websocketUrl !== undefined && data.websocketName != undefined) {
+        // var client = new WebSocket( 'ws://' + window.location.host + '/' +  data.websocketName );
+        var client = new WebSocket(data.websocketUrl, data.websocketName);
+        this.wfs.attachWebsocket(client, data.requestMsg, data.channelName, data.callback);
       } else {
         console.log('websocketName ERROE!!!');
       }
@@ -629,7 +955,6 @@ var FlowController = function (_EventHandler) {
         track = tracks[trackName];
         var initSegment = track.initSegment;
         if (initSegment) {
-          this.pendingAppending++;
           this.wfs.trigger(_events2.default.BUFFER_APPENDING, { type: trackName, data: initSegment, parent: 'main' });
         }
       }
@@ -639,12 +964,9 @@ var FlowController = function (_EventHandler) {
     value: function onFragParsingData(data) {
       var _this2 = this;
 
-      if (data.type === 'video') {}
-
       [data.data1, data.data2].forEach(function (buffer) {
         if (buffer) {
-          _this2.pendingAppending++;
-          _this2.wfs.trigger(_events2.default.BUFFER_APPENDING, { type: data.type, data: buffer, parent: 'main' });
+          _this2.wfs.trigger(_events2.default.BUFFER_APPENDING, { type: data.type, data: buffer, parent: 'main', ftime: data.ftime });
         }
       });
     }
@@ -655,7 +977,7 @@ var FlowController = function (_EventHandler) {
 
 exports.default = FlowController;
 
-},{"../event-handler":7,"../events":8}],4:[function(require,module,exports){
+},{"../event-handler":8,"../events":9}],5:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -669,6 +991,8 @@ var _createClass = function () { function defineProperties(target, props) { for 
 var _logger = require('../utils/logger');
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var sampling_frequency = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350, 0, 0, -1];
 
 var ExpGolomb = function () {
   function ExpGolomb(data) {
@@ -1012,6 +1336,22 @@ var ExpGolomb = function () {
       // return slice_type
       return this.readUEG();
     }
+  }, {
+    key: 'readAdts',
+    value: function readAdts() {
+      return {
+        syncword: this.readBits(12),
+        id: this.readBits(1),
+        layer: this.readBits(2),
+        protection_absent: this.readBits(1),
+        profile: this.readBits(2),
+        sampling_frequency_index: this.readBits(4),
+        private_bit: this.readBits(1),
+        channel_configuration: this.readBits(3),
+        original_copy: this.readBits(1),
+        home: this.readBits(1)
+      };
+    }
   }]);
 
   return ExpGolomb;
@@ -1019,7 +1359,7 @@ var ExpGolomb = function () {
 
 exports.default = ExpGolomb;
 
-},{"../utils/logger":15}],5:[function(require,module,exports){
+},{"../utils/logger":16}],6:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -1063,7 +1403,7 @@ var h264Demuxer = function (_EventHandler) {
 
     _classCallCheck(this, h264Demuxer);
 
-    var _this = _possibleConstructorReturn(this, (h264Demuxer.__proto__ || Object.getPrototypeOf(h264Demuxer)).call(this, wfs, _events2.default.H264_DATA_PARSED));
+    var _this = _possibleConstructorReturn(this, (h264Demuxer.__proto__ || Object.getPrototypeOf(h264Demuxer)).call(this, wfs, _events2.default.H264_DATA_PARSED, _events2.default.H264_DATA_PARSING));
 
     _this.config = _this.wfs.config || config;
     _this.wfs = wfs;
@@ -1076,9 +1416,9 @@ var h264Demuxer = function (_EventHandler) {
     _this.TIMESCALE = 90000;
     _this.timestamp = 0;
     _this.scaleFactor = _this.TIMESCALE / 1000;
-    _this.H264_TIMEBASE = 3000;
+    _this.H264_TIMEBASE = 3600;
     _this._avcTrack = { container: 'video/mp2t', type: 'video', id: 1, sequenceNumber: 0,
-      samples: [], len: 0, nbNalu: 0, dropped: 0, count: 0 };
+      samples: [], len: 0, nbNalu: 0, dropped: 0, count: 0, ftime: 0 };
     _this.browserType = 0;
     if (navigator.userAgent.toLowerCase().indexOf('firefox') !== -1) {
       _this.browserType = 1;
@@ -1100,8 +1440,8 @@ var h264Demuxer = function (_EventHandler) {
   }, {
     key: 'onH264DataParsed',
     value: function onH264DataParsed(event) {
-      this._parseAVCTrack(event.data);
-      if (this.browserType === 1 || this._avcTrack.samples.length >= 20) {
+      this._parseAVCTrack(event);
+      if (this.browserType === 1 || this._avcTrack.samples.length >= 1) {
         // Firefox
         this.remuxer.pushVideo(0, this.sn, this._avcTrack, this.timeOffset, this.contiguous);
         this.sn += 1;
@@ -1109,12 +1449,12 @@ var h264Demuxer = function (_EventHandler) {
     }
   }, {
     key: '_parseAVCTrack',
-    value: function _parseAVCTrack(array) {
+    value: function _parseAVCTrack(data) {
       var _this2 = this;
 
       var track = this._avcTrack,
           samples = track.samples,
-          units = this._parseAVCNALu(array),
+          units = this._parseAVCNALu(data.data),
           units2 = [],
           debug = false,
           key = false,
@@ -1123,6 +1463,7 @@ var h264Demuxer = function (_EventHandler) {
           avcSample,
           push,
           i;
+      track.ftime = data.ftime;
       var debugString = '';
       var pushAccesUnit = function () {
         if (units2.length) {
@@ -1222,7 +1563,7 @@ var h264Demuxer = function (_EventHandler) {
       });
 
       if (debug || debugString.length) {
-        logger.log(debugString);
+        //logger.log(debugString);
       }
 
       pushAccesUnit();
@@ -1335,7 +1676,7 @@ var h264Demuxer = function (_EventHandler) {
 
 exports.default = h264Demuxer;
 
-},{"../event-handler":7,"../events":8,"../remux/mp4-remuxer":13,"./exp-golomb":4}],6:[function(require,module,exports){
+},{"../event-handler":8,"../events":9,"../remux/mp4-remuxer":14,"./exp-golomb":5}],7:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -1399,7 +1740,7 @@ var ErrorDetails = exports.ErrorDetails = {
   INTERNAL_EXCEPTION: 'internalException'
 };
 
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -1505,7 +1846,7 @@ var EventHandler = function () {
 
 exports.default = EventHandler;
 
-},{"./events":8}],8:[function(require,module,exports){
+},{"./events":9}],9:[function(require,module,exports){
 'use strict';
 
 module.exports = {
@@ -1525,6 +1866,11 @@ module.exports = {
   FRAG_PARSING_DATA: 'wfsFragParsingData',
 
   FRAG_PARSING_INIT_SEGMENT: 'wfsFragParsingInitSegment',
+
+  AUDIODATA_APPENDING: 'wfsAudioDataAppending',
+
+  INIT_AUDIOPLAY: 'wfsInitAudioPlay',
+  BUFFER_SETLIVE: 'wfsBufferSetLive',
   //------------------------------------------
   H264_DATA_PARSING: 'wfsH264DataParsing',
 
@@ -1551,7 +1897,7 @@ module.exports = {
 
 };
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -1596,7 +1942,7 @@ var AAC = function () {
 
 exports.default = AAC;
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 'use strict';
 
 // This is mostly for support of the es6 module export
@@ -1604,7 +1950,7 @@ exports.default = AAC;
 // function exports like we are used to in node/commonjs
 module.exports = require('./wfs.js').default;
 
-},{"./wfs.js":18}],11:[function(require,module,exports){
+},{"./wfs.js":19}],12:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -1625,6 +1971,10 @@ var _h264NalSlicesreader = require('../utils/h264-nal-slicesreader.js');
 
 var _h264NalSlicesreader2 = _interopRequireDefault(_h264NalSlicesreader);
 
+var _expGolomb = require('../demux/exp-golomb.js');
+
+var _expGolomb2 = _interopRequireDefault(_expGolomb);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -1635,18 +1985,53 @@ function _inherits(subClass, superClass) { if (typeof superClass !== "function" 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 * Websocket Loader
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                */
 
+var count = 0;
+var blob2ArrayBuffer = async function blob2ArrayBuffer(blob) {
+  if (blob instanceof Blob) {
+    var arrayBuffer = await new Response(blob).arrayBuffer();
+    return arrayBuffer;
+  }
+};
+function getUint64(dataview, byteOffset, littleEndian) {
+  // 将 64 位整数值分成两份 32 位整数值
+  var left = dataview.getUint32(byteOffset, littleEndian);
+  var right = dataview.getUint32(byteOffset + 4, littleEndian);
+
+  // 合并两个 32 位整数值
+  var combined = littleEndian ? left + 2 ** 32 * right : 2 ** 32 * left + right;
+
+  if (!Number.isSafeInteger(combined)) console.warn(combined, 'exceeds MAX_SAFE_INTEGER. Precision may be lost');
+
+  return combined;
+}
+
 var WebsocketLoader = function (_EventHandler) {
   _inherits(WebsocketLoader, _EventHandler);
 
   function WebsocketLoader(wfs) {
     _classCallCheck(this, WebsocketLoader);
 
+    // this.buf = null;
     var _this = _possibleConstructorReturn(this, (WebsocketLoader.__proto__ || Object.getPrototypeOf(WebsocketLoader)).call(this, wfs, _events2.default.WEBSOCKET_ATTACHING, _events2.default.WEBSOCKET_DATA_UPLOADING, _events2.default.WEBSOCKET_MESSAGE_SENDING));
 
-    _this.buf = null;
     _this.slicesReader = new _h264NalSlicesreader2.default(wfs);
     _this.mediaType = undefined;
     _this.channelName = undefined;
+    _this.sendmsg = undefined;
+    _this.recvcount = 0;
+    _this.callback = undefined;
+    _this.recvsize = 0;
+    _this.lastrecvtime = 0;
+    _this.recvcount = 0;
+    _this.audioCtx = null;
+    _this.source = null;
+    _this.scriptNode = null;
+
+    _this.audiochannel = -1;
+    _this.audioBuffers = [];
+    _this.audiodecodebufs = [];
+    _this.audioplaytime = 0;
+    _this.scriptPos = 0;
     return _this;
   }
 
@@ -1662,6 +2047,8 @@ var WebsocketLoader = function (_EventHandler) {
     value: function onWebsocketAttaching(data) {
       this.mediaType = data.mediaType;
       this.channelName = data.channelName;
+      this.sendmsg = data.sendmsg;
+      this.callback = data.callback;
       if (data.websocket instanceof WebSocket) {
         this.client = data.websocket;
         this.client.onopen = this.initSocketClient.bind(this);
@@ -1673,22 +2060,38 @@ var WebsocketLoader = function (_EventHandler) {
   }, {
     key: 'initSocketClient',
     value: function initSocketClient(client) {
-      this.client.binaryType = 'arraybuffer';
       this.client.onmessage = this.receiveSocketMessage.bind(this);
-      this.wfs.trigger(_events2.default.WEBSOCKET_MESSAGE_SENDING, { commandType: "open", channelName: this.channelName, commandValue: "NA" });
+      this.wfs.trigger(_events2.default.WEBSOCKET_MESSAGE_SENDING, this.sendmsg);
       console.log('Websocket Open!');
     }
   }, {
     key: 'receiveSocketMessage',
-    value: function receiveSocketMessage(event) {
-      this.buf = new Uint8Array(event.data);
-      var copy = new Uint8Array(this.buf);
-
-      if (this.mediaType === 'FMp4') {
-        this.wfs.trigger(_events2.default.WEBSOCKET_ATTACHED, { payload: copy });
-      }
-      if (this.mediaType === 'H264Raw') {
-        this.wfs.trigger(_events2.default.H264_DATA_PARSING, { data: copy });
+    value: async function receiveSocketMessage(event) {
+      if (typeof event.data === "string") {
+        var obj = JSON.parse(event.data);
+        if (obj.classe == "Play") {
+          this.client.binaryType = 'arraybuffer';
+        }
+      } else {
+        var view = new DataView(event.data.slice(0, 16), 0);
+        var etype = view.getUint8(0);
+        var u8arr = new Uint8Array(event.data.slice(16));
+        if (etype === 0) {
+          //264
+          console.log();
+          this.wfs.trigger(_events2.default.H264_DATA_PARSED, { data: u8arr, ftime: parseInt(view.getBigInt64(4, 8)) });
+        } else if (etype === 19 || etype === 20 || etype === 14 || etype === 22 || etype === 37) {
+          this.wfs.trigger(_events2.default.AUDIODATA_APPENDING, { data: u8arr });
+        } else {
+          count++;
+        }
+        if (this.callback != undefined) {
+          var t = parseInt((new Date().getTime() - this.lastrecvtime) / 1000);
+          // this.callback({pts:datapts, kbps:parseInt(this.recvsize/t)})
+        }
+        // if (this.mediaType ==='FMp4'){
+        //   this.wfs.trigger(Event.WEBSOCKET_ATTACHED, {payload: event.data });
+        // } 
       }
     }
   }, {
@@ -1699,7 +2102,8 @@ var WebsocketLoader = function (_EventHandler) {
   }, {
     key: 'onWebsocketMessageSending',
     value: function onWebsocketMessageSending(event) {
-      this.client.send(JSON.stringify({ t: event.commandType, c: event.channelName, v: event.commandValue }));
+      this.client.send(event);
+      // this.client.send( JSON.stringify({ t: event.commandType, c:event.channelName, v: event.commandValue  }) );
     }
   }]);
 
@@ -1708,7 +2112,7 @@ var WebsocketLoader = function (_EventHandler) {
 
 exports.default = WebsocketLoader;
 
-},{"../event-handler":7,"../events":8,"../utils/h264-nal-slicesreader.js":14}],12:[function(require,module,exports){
+},{"../demux/exp-golomb.js":5,"../event-handler":8,"../events":9,"../utils/h264-nal-slicesreader.js":15}],13:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -1950,6 +2354,7 @@ var MP4 = function () {
     key: 'mvhd',
     value: function mvhd(timescale, duration) {
       duration *= timescale;
+      // duration = 0; //设置mvhd.duration = 0，如果有mehd的话，设置mehd.fragmentDuration = 0， 这样chrome 会进入“low delay mode”， 不会缓存数据。
       var bytes = new Uint8Array([0x00, // version 0
       0x00, 0x00, 0x00, // flags
       0x00, 0x00, 0x00, 0x01, // creation_time
@@ -2227,7 +2632,7 @@ var MP4 = function () {
 
 exports.default = MP4;
 
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -2273,7 +2678,7 @@ var MP4Remuxer = function () {
     this.PES_TIMESCALE = 90000;
     this.MP4_TIMESCALE = this.PES_TIMESCALE / this.PES2MP4SCALEFACTOR;
     this.nextAvcDts = 90300;
-    this.H264_TIMEBASE = 3000;
+    this.H264_TIMEBASE = 3600;
   }
 
   _createClass(MP4Remuxer, [{
@@ -2428,9 +2833,10 @@ var MP4Remuxer = function () {
         endPTS: ptsnorm,
         startDTS: dtsnorm,
         endDTS: dtsnorm,
-        type: 'video',
+        type: 'video', //"audio"
         nb: outputSamples.length,
-        dropped: dropped
+        dropped: dropped,
+        ftime: track.ftime
       };
 
       this.observer.trigger(_events2.default.FRAG_PARSING_DATA, data);
@@ -2480,6 +2886,8 @@ var MP4Remuxer = function () {
         console.log("generateVideoIS ERROR==> ", _errors.ErrorTypes.MEDIA_ERROR);
       }
     }
+    //level, sn, videoTrack, timeOffset, contiguous
+
   }, {
     key: 'remux',
     value: function remux(level, sn, audioTrack, videoTrack, id3Track, textTrack, timeOffset, contiguous) {
@@ -3109,7 +3517,7 @@ var MP4Remuxer = function () {
 
 exports.default = MP4Remuxer;
 
-},{"../errors":6,"../events":8,"../helper/aac":9,"../remux/mp4-generator":12,"../utils/logger":15,"../utils/polyfill":16}],14:[function(require,module,exports){
+},{"../errors":7,"../events":9,"../helper/aac":10,"../remux/mp4-generator":13,"../utils/logger":16,"../utils/polyfill":17}],15:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -3141,6 +3549,9 @@ function _inherits(subClass, superClass) { if (typeof superClass !== "function" 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 */
 
 
+var num = 0;
+var nalnum = 0;
+
 var SlicesReader = function (_EventHandler) {
     _inherits(SlicesReader, _EventHandler);
 
@@ -3149,13 +3560,16 @@ var SlicesReader = function (_EventHandler) {
 
         _classCallCheck(this, SlicesReader);
 
-        var _this = _possibleConstructorReturn(this, (SlicesReader.__proto__ || Object.getPrototypeOf(SlicesReader)).call(this, wfs, _events2.default.H264_DATA_PARSING));
+        var _this = _possibleConstructorReturn(this, (SlicesReader.__proto__ || Object.getPrototypeOf(SlicesReader)).call(this, wfs //Event.H264_DATA_PARSING
+        ));
 
         _this.config = _this.wfs.config || config;
         _this.h264Demuxer = new _h264Demuxer2.default(wfs);
         _this.wfs = wfs;
         _this.lastBuf = null;
         _this.nals = [];
+
+        // setInterval(this.outputlog, 1000);
         return _this;
     }
 
@@ -3165,6 +3579,11 @@ var SlicesReader = function (_EventHandler) {
             this.lastBuf = null;
             this.nals = [];
             _eventHandler2.default.prototype.destroy.call(this);
+        }
+    }, {
+        key: 'outputlog',
+        value: function outputlog() {
+            console.log("_read frame count:" + num + " nal count:" + nalnum);
         }
     }, {
         key: '_read',
@@ -3186,6 +3605,12 @@ var SlicesReader = function (_EventHandler) {
             for (var i = 0; i < typedAr.length; i += 2) {
                 var b_0 = typedAr[i];
                 var b_1 = typedAr[i + 1];
+                // if (typedAr[i] === 0 && typedAr[i + 1] === 0){
+                //     if (typedAr[i + 2] === 0 && typedAr[i + 3] === 1){
+                //         nalStartPos.push(i);
+                //     }
+                // }
+                var b_4 = typedAr[i + 4];
                 if (b1 == 0 && b_0 == 0 && b_1 == 0) {
                     nalStartPos.push(i - 1);
                 } else if (b_1 == 1 && b_0 == 0 && b1 == 0 && b2 == 0) {
@@ -3217,8 +3642,13 @@ var SlicesReader = function (_EventHandler) {
     }, {
         key: 'onH264DataParsing',
         value: function onH264DataParsing(event) {
+            if (event.payload == 14 || event.payload == 22 || event.payload == 37) {
+                console.log("音频数据");
+            }
             this._read(event.data);
             var $this = this;
+            num++;
+            nalnum += this.nals.length;
             this.nals.forEach(function (nal) {
                 $this.wfs.trigger(_events2.default.H264_DATA_PARSED, {
                     data: nal
@@ -3232,7 +3662,7 @@ var SlicesReader = function (_EventHandler) {
 
 exports.default = SlicesReader;
 
-},{"../demux/h264-demuxer":5,"../event-handler":7,"../events":8}],15:[function(require,module,exports){
+},{"../demux/h264-demuxer":6,"../event-handler":8,"../events":9}],16:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -3315,7 +3745,7 @@ var enableLogs = exports.enableLogs = function enableLogs(debugConfig) {
 
 var logger = exports.logger = exportedLogger;
 
-},{}],16:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 'use strict';
 
 if (typeof ArrayBuffer !== 'undefined' && !ArrayBuffer.prototype.slice) {
@@ -3333,7 +3763,7 @@ if (typeof ArrayBuffer !== 'undefined' && !ArrayBuffer.prototype.slice) {
   };
 }
 
-},{}],17:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -3507,7 +3937,7 @@ var XhrLoader = function () {
 
 exports.default = XhrLoader;
 
-},{}],18:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 /**
  * WFS interface, Jeff Yang 2016.10
  */
@@ -3543,6 +3973,10 @@ var _websocketLoader = require('./loader/websocket-loader');
 
 var _websocketLoader2 = _interopRequireDefault(_websocketLoader);
 
+var _audioplay = require('./controller/audioplay');
+
+var _audioplay2 = _interopRequireDefault(_audioplay);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -3575,7 +4009,7 @@ var Wfs = function () {
           fLoader: undefined,
           loader: _xhrLoader2.default,
           //loader: FetchLoader,
-          fmp4FileUrl: 'xxxx.mp4',
+          // fmp4FileUrl: 'xxxx.mp4',
           fragLoadingTimeOut: 20000,
           fragLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 1000,
@@ -3630,7 +4064,12 @@ var Wfs = function () {
     this.bufferController = new _bufferController2.default(this);
     //  this.fileLoader = new FileLoader(this);
     this.websocketLoader = new _websocketLoader2.default(this);
+    this.audioplay = new _audioplay2.default(this);
     this.mediaType = undefined;
+    this.callback = undefined;
+    this.audioCtx = undefined;
+    this.source = undefined;
+    this.audioplay = false;
   }
 
   _createClass(Wfs, [{
@@ -3641,21 +4080,58 @@ var Wfs = function () {
       //   this.fileLoader.destroy();
       this.websocketLoader.destroy();
     }
+
+    // attachMedia(media, websocketurl, requestmsg, channelName='chX',mediaType='H264Raw', websocketName='play2') { // 'H264Raw' 'FMp4'  
+
+  }, {
+    key: 'attachMediaEx',
+    value: function attachMediaEx(config) {
+      // 'H264Raw' 'FMp4'    
+      this.mediaType = config.mediaType;
+      this.media = config.media;
+      this.callback = config.callback;
+      this.bufferController.isLive = config.isLive;
+      // this.media.playbackRate = 1.5;
+      this.websocketUrl = config.websocketurl;
+      this.requestMsg = config.requestmsg;
+      // this.trigger(Event.MEDIA_ATTACHING, {media:media, websocketUrl: websocketurl, requestMsg:requestmsg, channelName:channelName, mediaType:mediaType, websocketName:"ws" });
+      this.trigger(_events2.default.MEDIA_ATTACHING, { media: this.media, websocketUrl: this.websocketurl, requestMsg: this.requestmsg, channelName: config.channelName, mediaType: this.mediaType, websocketName: "ws", callback: this.callback });
+    }
   }, {
     key: 'attachMedia',
-    value: function attachMedia(media) {
-      var channelName = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 'chX';
-      var mediaType = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 'H264Raw';
-      var websocketName = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 'play2';
+    value: function attachMedia(media, websocketurl, requestmsg, isLive, callback) {
+      var channelName = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : 'chX';
+      var mediaType = arguments.length > 6 && arguments[6] !== undefined ? arguments[6] : 'H264Raw';
       // 'H264Raw' 'FMp4'    
       this.mediaType = mediaType;
       this.media = media;
-      this.trigger(_events2.default.MEDIA_ATTACHING, { media: media, channelName: channelName, mediaType: mediaType, websocketName: websocketName });
+      this.callback = callback;
+      if (isLive != undefined) this.bufferController.isLive = isLive;
+      // this.media.playbackRate = 1.5;
+      this.websocketUrl = websocketurl;
+      this.requestMsg = requestmsg;
+      // this.trigger(Event.MEDIA_ATTACHING, {media:media, websocketUrl: websocketurl, requestMsg:requestmsg, channelName:channelName, mediaType:mediaType, websocketName:"ws" });
+      this.trigger(_events2.default.MEDIA_ATTACHING, { media: media, websocketUrl: websocketurl, requestMsg: requestmsg, channelName: channelName, mediaType: mediaType, websocketName: "ws", callback: callback });
     }
   }, {
     key: 'attachWebsocket',
-    value: function attachWebsocket(websocket, channelName) {
-      this.trigger(_events2.default.WEBSOCKET_ATTACHING, { websocket: websocket, mediaType: this.mediaType, channelName: channelName });
+    value: function attachWebsocket(websocket, requestMsg, channelName, callback) {
+      this.trigger(_events2.default.WEBSOCKET_ATTACHING, { websocket: websocket, mediaType: this.mediaType, channelName: channelName, sendmsg: requestMsg, callback: callback });
+    }
+  }, {
+    key: 'send',
+    value: function send(msg) {
+      this.trigger(_events2.default.WEBSOCKET_MESSAGE_SENDING, msg);
+    }
+  }, {
+    key: 'startAudio',
+    value: function startAudio() {
+      this.trigger(_events2.default.INIT_AUDIOPLAY, { type: "start" });
+    }
+  }, {
+    key: 'closeAudio',
+    value: function closeAudio() {
+      this.trigger(_events2.default.INIT_AUDIOPLAY, { type: "close" });
     }
   }]);
 
@@ -3664,6 +4140,6 @@ var Wfs = function () {
 
 exports.default = Wfs;
 
-},{"./controller/buffer-controller":2,"./controller/flow-controller":3,"./events":8,"./loader/websocket-loader":11,"./utils/xhr-loader":17,"events":1}]},{},[10])(10)
+},{"./controller/audioplay":2,"./controller/buffer-controller":3,"./controller/flow-controller":4,"./events":9,"./loader/websocket-loader":12,"./utils/xhr-loader":18,"events":1}]},{},[11])(11)
 });
 //# sourceMappingURL=wfs.js.map
