@@ -4,6 +4,8 @@
 
 import {logger} from '../utils/logger';
 
+let sampling_frequency = [96000, 88200, 64000, 48000, 44100,32000,24000, 22050,16000,12000,11025,8000, 7350,0,0,-1];
+
 class ExpGolomb {
 
   constructor(data) {
@@ -288,6 +290,20 @@ class ExpGolomb {
     this.readUEG();
     // return slice_type
     return this.readUEG();
+  }
+  readAdts(){
+    return {
+      syncword:this.readBits(12),
+      id:this.readBits(1),
+      layer:this.readBits(2),
+      protection_absent:this.readBits(1),
+      profile:this.readBits(2),
+      sampling_frequency_index:this.readBits(4),
+      private_bit:this.readBits(1),
+      channel_configuration:this.readBits(3),
+      original_copy:this.readBits(1),
+      home:this.readBits(1)
+    }
   }
 }
 

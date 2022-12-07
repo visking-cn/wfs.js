@@ -246,6 +246,7 @@ class MP4 {
 
   static mvhd(timescale,duration) {
     duration*=timescale;
+    // duration = 0; //设置mvhd.duration = 0，如果有mehd的话，设置mehd.fragmentDuration = 0， 这样chrome 会进入“low delay mode”， 不会缓存数据。
     var
       bytes = new Uint8Array([
         0x00, // version 0

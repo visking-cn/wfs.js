@@ -18,7 +18,7 @@ class MP4Remuxer {
     this.PES_TIMESCALE = 90000;
     this.MP4_TIMESCALE = this.PES_TIMESCALE / this.PES2MP4SCALEFACTOR;
     this.nextAvcDts = 90300;
-    this.H264_TIMEBASE = 3000;
+    this.H264_TIMEBASE = 3600;
   }
 
   get passthrough() {
@@ -167,9 +167,10 @@ class MP4Remuxer {
       endPTS: ptsnorm, 
       startDTS: dtsnorm, 
       endDTS: dtsnorm, 
-      type: 'video',
+      type: 'video',              //"audio"
       nb: outputSamples.length,
-      dropped : dropped
+      dropped : dropped,
+      ftime:track.ftime
     };
     
     this.observer.trigger(Event.FRAG_PARSING_DATA, data);    
@@ -217,7 +218,7 @@ class MP4Remuxer {
       console.log( "generateVideoIS ERROR==> ", ErrorTypes.MEDIA_ERROR);  
     }
   }
- 
+ //level, sn, videoTrack, timeOffset, contiguous
   remux(level,sn,audioTrack,videoTrack,id3Track,textTrack,timeOffset, contiguous) {
     this.level = level;
     this.sn = sn;

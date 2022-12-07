@@ -4,7 +4,7 @@
  
 import Event from '../events';
 import EventHandler from '../event-handler'; 
-
+let pendingAppendingcount = 0;
 class FlowController extends EventHandler {
 
   constructor(wfs) {
@@ -23,16 +23,20 @@ class FlowController extends EventHandler {
     this.pendingAppending = 0;
     this.mediaType = undefined; 
     channelName:this.channelName;
+    // setInterval(this.outputlog, 1000);
   }
 
   destroy() {
      EventHandler.prototype.destroy.call(this);
   }  
-
+  outputlog(){
+    console.log("this.pendingAppending :", pendingAppendingcount)
+  }
   onMediaAttached(data) {      
-    if (data.websocketName != undefined){
-      var client = new WebSocket( 'ws://' + window.location.host + '/' +  data.websocketName );
-      this.wfs.attachWebsocket(client,data.channelName);
+    if (data.websocketUrl !== undefined && data.websocketName != undefined){
+      // var client = new WebSocket( 'ws://' + window.location.host + '/' +  data.websocketName );
+      var client = new WebSocket(data.websocketUrl, data.websocketName);
+      this.wfs.attachWebsocket(client, data.requestMsg, data.channelName, data.callback);
     }else{
        console.log('websocketName ERROE!!!');
     }
@@ -68,26 +72,18 @@ class FlowController extends EventHandler {
         track = tracks[trackName];
         var initSegment = track.initSegment;
         if (initSegment) {
-          this.pendingAppending++;
           this.wfs.trigger(Event.BUFFER_APPENDING, {type: trackName, data: initSegment, parent : 'main'});
         }
       }
- 
   }
 
   onFragParsingData(data) {
- 
-      if(data.type === 'video') {
-     
-      }
        
       [data.data1, data.data2].forEach(buffer => {
         if (buffer) {
-          this.pendingAppending++;
-          this.wfs.trigger(Event.BUFFER_APPENDING, {type: data.type, data: buffer, parent : 'main'}); 
+          this.wfs.trigger(Event.BUFFER_APPENDING, {type: data.type, data: buffer, parent : 'main',ftime:data.ftime}); 
         }
       });
- 
   }
 
 }

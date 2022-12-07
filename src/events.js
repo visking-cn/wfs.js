@@ -15,6 +15,11 @@ module.exports = {
   FRAG_PARSING_DATA: 'wfsFragParsingData',
  
   FRAG_PARSING_INIT_SEGMENT: 'wfsFragParsingInitSegment',
+
+  AUDIODATA_APPENDING: 'wfsAudioDataAppending',
+
+  INIT_AUDIOPLAY: 'wfsInitAudioPlay',
+  BUFFER_SETLIVE: 'wfsBufferSetLive',
 //------------------------------------------
   H264_DATA_PARSING: 'wfsH264DataParsing',
 

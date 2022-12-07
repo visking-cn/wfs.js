@@ -10,7 +10,9 @@ class h264Demuxer extends EventHandler {
   
   constructor(wfs, config=null) {
     super(wfs, 
-      Event.H264_DATA_PARSED);
+      Event.H264_DATA_PARSED,
+      Event.H264_DATA_PARSING
+      );
 
     this.config = this.wfs.config || config;
     this.wfs = wfs;
@@ -23,9 +25,9 @@ class h264Demuxer extends EventHandler {
     this.TIMESCALE = 90000; 
     this.timestamp = 0;
     this.scaleFactor = this.TIMESCALE /1000;
-    this.H264_TIMEBASE = 3000;
+    this.H264_TIMEBASE = 3600;
     this._avcTrack = {container : 'video/mp2t', type: 'video', id :1, sequenceNumber: 0,
-     samples : [], len : 0, nbNalu : 0, dropped : 0, count : 0 };
+     samples : [], len : 0, nbNalu : 0, dropped : 0, count : 0,ftime:0 };
     this.browserType = 0;
     if (navigator.userAgent.toLowerCase().indexOf('firefox') !== -1){
       this.browserType = 1;
@@ -42,17 +44,17 @@ class h264Demuxer extends EventHandler {
   }
 
   onH264DataParsed(event){ 
-    this._parseAVCTrack( event.data); 
-    if (this.browserType === 1 || this._avcTrack.samples.length >= 20){ // Firefox
+    this._parseAVCTrack(event); 
+    if (this.browserType === 1 || this._avcTrack.samples.length >= 1){ // Firefox
       this.remuxer.pushVideo(0, this.sn, this._avcTrack, this.timeOffset, this.contiguous);
       this.sn += 1;
     }
   } 
 
-  _parseAVCTrack(array) {
+  _parseAVCTrack(data) {
     var track = this._avcTrack,
       samples = track.samples,
-      units = this._parseAVCNALu(array),
+      units = this._parseAVCNALu(data.data),
       units2 = [],
       debug = false,
       key = false,
@@ -60,7 +62,8 @@ class h264Demuxer extends EventHandler {
       expGolombDecoder,
       avcSample,
       push,
-      i;    
+      i;  
+      track.ftime = data.ftime  
     var debugString = '';
     var pushAccesUnit = function() {
       if (units2.length) { 
@@ -163,7 +166,7 @@ class h264Demuxer extends EventHandler {
     });
     
     if(debug || debugString.length) {
-      logger.log(debugString);
+      //logger.log(debugString);
     }
     
     pushAccesUnit();
