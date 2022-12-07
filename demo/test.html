@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>h.264 To fmp4</title>
+    <style>
+        .container {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+        }
+        .wfsjs {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <h2>h.264 To fmp4</h2>
+    <!-- <script type="text/javascript" src="/dist/wfs.js"></script> -->
+    <div class="container">
+        <video id="video1" width="480" height="320"  muted controls autoplay></video>
+        <!-- <video id="video2" width="320" height="280" muted controls autoplay></video>
+        <video id="video3" width="320" height="280" muted controls autoplay></video>
+        <video id="video4" width="320" height="280" muted controls autoplay></video> -->   
+    </div>
+
+    <script>
+        var isfirst = true;
+        var video = document.querySelector('video');
+        var wsUrl = "ws://192.168.1.68:9899";
+        var mimeCodec = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
+        if('MediaSource' in window && MediaSource.isTypeSupported(mimeCodec)){
+            var mediaSource = new MediaSource();
+            console.log(mediaSource.readyState);
+            video.src = URL.createObjectURL(mediaSource);
+            mediaSource.addEventListener('sourceopen', sourceOpen);
+        }else{
+            console.error('Unsupported MIME type or codec: ', mimeCodec);
+        }
+        function sourceOpen(){
+            console.log(this.readyState);
+            var mediaSource = this;
+            var sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
+            fetchMedia(wsUrl, function(buf){
+                sourceBuffer.addEventListener('updateend', function(){
+                    mediaSource.endOfStream();
+                    video.play();
+                    console.log(mediaSource.readyState);
+                });
+                sourceBuffer.appendBuffer(buf);
+            });
+        };
+        function fetchMedia(url, cb){
+            console.log(url);
+            ws = new WebSocket(url, "ws");
+            ws.onopen = function(){
+                console.log('connected');
+                ws.send('{"classe":"Play","cmd":"Preview","params":{"streamtype":0,"streamno":0,"handle":19 }}');
+            }
+            ws.onmessage = function(e){
+                if(isfirst){
+                    console.log(e.data);
+                    isfirst = false;
+                    ws.binaryType = "arraybuffer";
+                }else{
+                    cb(e.data);
+                }
+            }
+            ws.onclose = function(){
+                console.log('closed');
+            }
+            ws.onerror = function(e){
+                console.log(e.msg);
+            }
+        }
+    </script>
+</body>
+</html>
